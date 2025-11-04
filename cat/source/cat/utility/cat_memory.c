@@ -34,6 +34,13 @@ typedef struct cat_malloc_metadata_s
 {
 #ifdef _WIN32
     //****TO-DO-MEMORY: fill in this structure.
+    struct car_malloc_metadata_s* p_prev;
+    struct car_malloc_metadata_s* p_next;
+    char* file;
+    uint32_t line;
+    uint32_t mode;
+    size_t size;
+    uint32_t sequence;
     uint32_t reserved;
 #else // #ifdef _WIN32
     uint32_t reserved;
@@ -188,6 +195,18 @@ cat_noinl void cat_memory_test(void)
     block_lh = NULL;
     cat_free(block_rh);
     block_rh = NULL;
+
+    {
+        void* volatile testA = malloc(1024);
+        void* volatile testB = malloc(2028);
+        void* volatile testC = malloc(4096);
+        void* volatile testD = malloc(8192);
+
+        free(testA);
+        free(testB);
+        free(testC);
+        free(testD);
+    }
 }
 
 
