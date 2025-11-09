@@ -34,8 +34,8 @@ typedef struct cat_malloc_metadata_s
 {
 #ifdef _WIN32
     //****TO-DO-MEMORY: fill in this structure.
-    struct car_malloc_metadata_s* p_prev;
-    struct car_malloc_metadata_s* p_next;
+    struct cat_malloc_metadata_s* p_prev;
+    struct cat_malloc_metadata_s* p_next;
     char* file;
     uint32_t line;
     uint32_t mode;
@@ -48,6 +48,9 @@ typedef struct cat_malloc_metadata_s
 } cat_malloc_metadata_t;
 #endif // #ifdef CAT_DEBUG
 
+static void* pool;
+static size_t poolSize;
+static cat_malloc_metadata_t* heap;
 
 cat_impl void* cat_memset(void* const p_block, uint8_t const value, size_t const set_size)
 {
@@ -138,6 +141,12 @@ cat_impl bool cat_memory_pool_create(size_t const pool_size)
     assert_or_bail(pool_size) false;
     
     //****TO-DO-MEMORY: allocate and initialize pool.
+    if (pool == NULL)
+    {
+        pool = (void*)malloc(pool_size);
+        poolSize = pool_size;
+        return true;
+    }
 
     return false;
 }
@@ -145,6 +154,11 @@ cat_impl bool cat_memory_pool_create(size_t const pool_size)
 cat_impl bool cat_memory_pool_destroy(void)
 {
     //****TO-DO-MEMORY: safely deallocate pool allocated above.
+    if (pool != NULL)
+    {
+        free(pool);
+        return true;
+    }
 
     return false;
 }
@@ -154,6 +168,48 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
     assert_or_bail(block_size) NULL;
 
     //****TO-DO-MEMORY: reserve block in managed pool.
+    if (pool != NULL)
+    {
+        //make sure we have memoery to assig
+        assert(poolSize > block_size);
+        //no allocations so make one
+        if (heap == NULL)
+        {
+            cat_malloc_metadata_t* head = (cat_malloc_metadata_t*)pool;
+            head->p_prev = NULL;
+            head->p_next = NULL;
+            head->sequence = 0;
+            head->file = (char*)pool; //is this this correct?
+            head->size = block_size;
+
+            heap = head;
+
+            poolSize -= block_size;
+
+            return (void*)((char*)pool);
+        }
+
+        cat_malloc_metadata_t* cur = heap;
+
+        //find the next place in memeoryfile
+        while (cur->p_next != NULL)
+        {
+            cur = cur->p_next;
+        }
+
+        cat_malloc_metadata_t* newNode = (cat_malloc_metadata_t*)(cur->file + cur->size);
+        cur->p_next = newNode;
+        newNode->p_prev = cur;
+        newNode->p_next = NULL;
+        newNode->sequence = cur->sequence++;
+        //try to ge the start of the next node
+        newNode->file = ((char*)pool + cur->size);
+        newNode->size = block_size;
+
+        poolSize -= block_size;
+        return (void*)((char*)pool + cur->size);
+
+    }
 
     return NULL;
 }
@@ -163,6 +219,35 @@ cat_impl bool cat_memory_dealloc(void* const p_block)
     assert_or_bail(p_block) false;
 
     //****TO-DO-MEMORY: safely release block reserved above.
+
+    assert(heap != NULL);
+    
+    cat_malloc_metadata_t* cur = heap;
+
+    while (cur->p_next != NULL)
+    {
+        if (cur->file == (char*)p_block)
+        {
+            cat_malloc_metadata_t* prev = cur->p_prev;
+            cat_malloc_metadata_t* next = cur->p_next;
+
+            if (prev != NULL)
+            {
+                prev->p_next = next;
+            }
+
+            if (next != NULL)
+            {
+                next->p_prev = prev;
+            }
+
+
+            poolSize += cur->size;
+        }
+        cur = cur->p_next;
+    }
+    
+
 
     return false;
 }
@@ -177,6 +262,18 @@ cat_noinl void cat_memory_test(void)
     bool result = false;
     void* block_lh = cat_malloc(1024);
     void* block_rh = cat_malloc(2048);
+
+    bool test = cat_memory_pool_create(2048);
+    assert(test == true);
+
+    //intentinal memeory leak
+    void* aloc;
+    unused(aloc);
+
+    for (int i = 0; i < 2048; i++)
+    {
+        cat_memory_alloc(100);
+    }
 
     if (block_lh && block_rh)
     {
