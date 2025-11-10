@@ -95,6 +95,23 @@ cat_impl bool cat_thread_rename(cstr_t const name)
 #include "cat/utility/cat_time.h"
 #include "cat/utility/cat_console.h"
 
+typedef struct thread_data
+{
+    int executing;
+    int result;
+} thread_data;
+
+typedef struct thread_data_node
+{
+    struct thread_data_node* nextNode;
+    thread_data thrd_data;
+} thread_data_node;
+
+typedef struct thread_manager
+{
+    thread_data_node* deactive_thread_list;
+    thread_data_node* active_thread_list;
+} thread_manager;
 
 static int cat_thread_test_func(size_t const argc, void* const argv[])
 {
@@ -118,6 +135,22 @@ static int cat_thread_test_func(size_t const argc, void* const argv[])
     return result;
 }
 
+static int new_thread_test_func(size_t const argc, void* const argv[])
+{
+    thrd_t const* p_thrd = NULL;
+    thread_data * p_thrd_data = NULL;
+    assert_or_bail((argc == 2) && argv && argv[0] && argv[1]) 1;
+    p_thrd = (thrd_t const*)argv[0];
+    p_thrd_data = (thread_data *)argv[1];
+
+    cat_platform_sleep(cat_platform_time_rate() * 5);
+
+    p_thrd_data->result = 21;
+    p_thrd_data->executing = 0;
+
+    return 0;
+}
+
 static int thrd_test_func(void* const arg)
 {
     unused(arg);
@@ -126,22 +159,165 @@ static int thrd_test_func(void* const arg)
     return 0;
 }
 
+cat_noinl void create_new_thread(thread_manager* const thrd_manager)
+{
+    thread_data_node* currNode = thrd_manager->deactive_thread_list;
+
+    if (currNode == NULL)
+    {
+        currNode = (thread_data_node*)malloc(sizeof(thread_data_node));
+        currNode->nextNode = NULL;
+
+        thrd_manager->deactive_thread_list = currNode;
+
+        return;
+    }
+
+    while (currNode->nextNode != NULL)
+    {
+        currNode = currNode->nextNode;
+    }
+
+    currNode->nextNode = (thread_data_node*)malloc(sizeof(thread_data_node));
+    currNode->nextNode->nextNode = NULL;
+}
+
+cat_noinl int run_new_thread(thread_manager* const thrd_manager, cat_thread_func_t func, thrd_t thrd, cat_thread_params_t params)
+{
+    unused(func);
+    if (thrd_manager->deactive_thread_list != NULL)
+    {
+        //Saves first avalable thread ptr
+        thread_data_node* temp = thrd_manager->deactive_thread_list;
+
+        //Removes the first thread ptr off the deactive list 
+        thrd_manager->deactive_thread_list = thrd_manager->deactive_thread_list->nextNode;
+
+        //Adds the thread to the front of the active list
+        temp->nextNode = thrd_manager->active_thread_list;
+
+        //Reassigns the active list start pointer
+        thrd_manager->active_thread_list = temp;
+
+        //Creates and runs the actual std::thread
+        int thrd_res = cat_thrd_create(&thrd, &params);
+        assert_or_bail(thrd_res == thrd_success) 0;
+        thrd_detach(thrd);
+        
+        //int res = 0;
+        //thrd_join(thrd, &res);
+
+        //Sets executing value
+        thrd_manager->active_thread_list->thrd_data.executing = 1;
+
+        return 1;
+    }
+
+    return 0;
+}
+
+cat_noinl void handle_thread_finished(thread_manager* const thrd_manager, thread_data_node* nodeDoneExecuting)
+{
+    thread_data_node* currNode = thrd_manager->active_thread_list;
+    thread_data_node* prevNode = NULL;
+
+    //To lazy to make a doubly linked list so just iterate until we find the 
+    // current node and keep track of the before node
+    while (currNode != nodeDoneExecuting && currNode != NULL)
+    {
+        prevNode = currNode;
+        currNode = currNode->nextNode;
+    }
+
+    if (prevNode == NULL)
+    {
+        //Updates active thread list start
+        thrd_manager->active_thread_list = currNode->nextNode;
+    }
+    else if (currNode != NULL)
+    {
+        //Updates active thread list connections
+        prevNode->nextNode = currNode->nextNode;
+    }
+
+    currNode->nextNode = thrd_manager->deactive_thread_list;
+    thrd_manager->deactive_thread_list = currNode;
+}
+
+cat_noinl void free_thread_manager(thread_manager* thrd_manager)
+{
+    thread_data_node* currNode = thrd_manager->active_thread_list;
+    thread_data_node* nextNode = NULL;
+
+    while (currNode != NULL)
+    {
+        nextNode = currNode->nextNode;
+        free(currNode);
+        currNode = nextNode;
+    }
+
+    currNode = thrd_manager->deactive_thread_list;
+    nextNode = NULL;
+
+    while (currNode != NULL)
+    {
+        nextNode = currNode->nextNode;
+        free(currNode);
+        currNode = nextNode;
+    }
+
+    free(thrd_manager);
+}
+
 cat_noinl void cat_thread_test(void)
 {
+    //thrd_t thrd = { 0 };
+    //int thrd_res = 0;
+    //int print_count = 10000;
+    //void* const args[] = {
+    //    &thrd,       // thread object
+    //    __FUNCTION__,// thread name
+    //    &print_count,// print count
+    //};
+    //cat_thread_params_t const params = {
+    //    &cat_thread_test_func, array_count(args), args
+    //};
+
+    //NEW VALUES
+    thread_manager* const thrd_manager = (thread_manager*)malloc(sizeof(thread_manager));
+    thrd_manager->active_thread_list = NULL;
+    thrd_manager->deactive_thread_list = NULL;
+
+    create_new_thread(thrd_manager);
+    create_new_thread(thrd_manager);
+
+    //run_new_thread();
+
     thrd_t thrd = { 0 };
-    int thrd_res = 0;
-    int print_count = 10000;
     void* const args[] = {
-        &thrd,       // thread object
-        __FUNCTION__,// thread name
-        &print_count,// print count
-    };
-    cat_thread_params_t const params = {
-        &cat_thread_test_func, array_count(args), args
+    &thrd,       // thread object
+    &thrd_manager->deactive_thread_list->thrd_data,
     };
 
+    cat_thread_params_t const params = {
+        &new_thread_test_func, array_count(args), args
+    };
+
+    run_new_thread(thrd_manager, new_thread_test_func, thrd, params);
+
+    thrd_t thrd2 = { 0 };
+    void* const args2[] = {
+    &thrd2,       // thread object
+    &thrd_manager->deactive_thread_list->thrd_data,
+    };
+
+    cat_thread_params_t const params2 = {
+        &new_thread_test_func, array_count(args2), args2
+    };
+    run_new_thread(thrd_manager, new_thread_test_func, thrd2, params2);
+
     cat_console_clear();
-    {
+    /*{
         thrd_res = thrd_create(&thrd, &thrd_test_func, NULL);
         assert_or_bail(thrd_res == thrd_success);
         thrd_join(thrd, &thrd_res);
@@ -150,8 +326,32 @@ cat_noinl void cat_thread_test(void)
         thrd_res = cat_thrd_create(&thrd, &params);
         assert_or_bail(thrd_res == thrd_success);
         thrd_join(thrd, &thrd_res);
+    }*/
+    {
+        /*thrd_res_new = cat_thrd_create(&thrd_new, &params_new);
+        assert_or_bail(thrd_res_new == thrd_success);
+        thrd_detach(thrd_new);*/
     }
+
+    while (thrd_manager->active_thread_list != NULL)
+    {
+        thread_data_node* currNode = thrd_manager->active_thread_list;
+        thread_data_node* nextNode = NULL;
+
+        while (currNode != NULL)
+        {
+            if (currNode->thrd_data.executing == 0)
+            {
+                nextNode = currNode->nextNode;
+                handle_thread_finished(thrd_manager, currNode);
+                currNode = nextNode;
+            }
+        }
+    }
+
     cat_platform_sleep(cat_platform_time_rate());
+
+    free_thread_manager(thrd_manager);
 }
 
 
