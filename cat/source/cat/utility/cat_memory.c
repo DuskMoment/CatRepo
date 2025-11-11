@@ -163,6 +163,44 @@ cat_impl bool cat_memory_pool_destroy(void)
     return false;
 }
 
+cat_impl cat_malloc_metadata_t* CreateCatNode(cat_malloc_metadata_t* pPrev, cat_malloc_metadata_t* pNext, size_t const block_size)
+{
+    unused(pNext);
+    //create the first node
+    if (pPrev == NULL)
+    {
+        cat_malloc_metadata_t* head = (cat_malloc_metadata_t*)pool;
+        head->p_prev = NULL;
+        head->p_next = NULL;
+        head->sequence = 0;
+        head->file = (char*)pool + sizeof(cat_malloc_metadata_t); //is this this correct?
+        head->size = block_size + 1;//add the pad
+        head->mode = 0;
+
+        poolSize -= head->size;
+        poolSize -= sizeof(cat_malloc_metadata_t);
+
+        return head;
+    }
+
+    //get end plus pad
+    cat_malloc_metadata_t* newNode = (cat_malloc_metadata_t*)(pPrev->file + pPrev->size);
+    pPrev->p_next = newNode;
+    newNode->p_prev = pPrev;
+    newNode->p_next = pNext;
+    newNode->sequence = pPrev->sequence++;
+    newNode->mode = 0;
+    //try to ge the start of the next node
+    newNode->file = ((char*)pPrev->file + pPrev->size + sizeof(cat_malloc_metadata_t));
+    newNode->size = block_size + 1;
+
+    poolSize -= newNode->size;
+    poolSize -= sizeof(cat_malloc_metadata_t);
+
+    return newNode;
+   
+}
+
 cat_impl void* cat_memory_alloc(size_t const block_size)
 {
     assert_or_bail(block_size) NULL;
@@ -175,19 +213,8 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
         //no allocations so make one
         if (heap == NULL)
         {
-            cat_malloc_metadata_t* head = (cat_malloc_metadata_t*)pool;
-            head->p_prev = NULL;
-            head->p_next = NULL;
-            head->sequence = 0;
-            head->file = (char*)pool; //is this this correct?
-            head->size = block_size;
-            head->mode = 0;
-
-            heap = head;
-
-            poolSize -= block_size;
-
-            return (void*)((char*)pool);
+            heap = CreateCatNode(NULL, NULL, block_size);
+            return (void*)(heap->file);
         }
 
         cat_malloc_metadata_t* cur = heap;
@@ -195,21 +222,31 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
         //find the next place in memeoryfile
         while (cur->p_next != NULL)
         {
+            //check the distance between the two and see if there is any room for us to allocated in between
+            cat_malloc_metadata_t* nextNode = cur->p_next;
+
+            //end - start of the nodes 
+            ptrdiff_t distance = (nextNode->file + nextNode->size) - (cur->file - sizeof(cat_malloc_metadata_t));
+
+            //get the distance inbetween -- I think I am missing 48 btyes in this calculation some where
+            distance -= (cur->size + nextNode->size) + (sizeof(cat_malloc_metadata_t)*2);
+
+            if((size_t)distance > (block_size + sizeof(cat_malloc_metadata_t)))
+            {
+                //create new node here
+                cat_malloc_metadata_t* injectionNode = CreateCatNode(cur, nextNode, block_size);
+
+                return (void*)(injectionNode->file);
+            }
+
+
             cur = cur->p_next;
         }
 
-        cat_malloc_metadata_t* newNode = (cat_malloc_metadata_t*)(cur->file + cur->size);
-        cur->p_next = newNode;
-        newNode->p_prev = cur;
-        newNode->p_next = NULL;
-        newNode->sequence = cur->sequence++;
-        newNode->mode = 0;
-        //try to ge the start of the next node
-        newNode->file = ((char*)pool + cur->size);
-        newNode->size = block_size;
-
-        poolSize -= block_size;
-        return (void*)((char*)pool + cur->size);
+        cat_malloc_metadata_t* newNode = CreateCatNode(cur, NULL, block_size);
+        unused(newNode);
+        
+        return (void*)(newNode->file);
 
     }
 
@@ -222,6 +259,7 @@ cat_impl bool cat_memory_dealloc(void* const p_block)
 
     //****TO-DO-MEMORY: safely release block reserved above.
 
+    //might need to do mem copy to get rid  of all the stuff
     assert(heap != NULL);
     
     cat_malloc_metadata_t* cur = heap;
@@ -243,8 +281,13 @@ cat_impl bool cat_memory_dealloc(void* const p_block)
                 next->p_prev = prev;
             }
 
+            //add cat size 
+            poolSize += cur->size + sizeof(cat_malloc_metadata_t);
 
-            poolSize += cur->size;
+            cat_memset(cur->file, 0, cur->size);
+            cat_memset(cur, 0, sizeof(cat_malloc_metadata_t));
+
+            return true;
         }
         cur = cur->p_next;
     }
@@ -270,12 +313,18 @@ cat_noinl void cat_memory_test(void)
 
     //intentinal memeory leak
     void* aloc;
-    unused(aloc);
+    //unused(aloc);
 
-    for (int i = 0; i < 2048; i++)
-    {
-        cat_memory_alloc(100);
-    }
+    cat_memory_alloc(100);
+
+    aloc = cat_memory_alloc(100);
+    
+    cat_memory_alloc(100);
+
+    cat_memory_dealloc(aloc);
+
+    cat_memory_alloc(100);
+
 
     if (block_lh && block_rh)
     {
