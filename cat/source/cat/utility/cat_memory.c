@@ -181,6 +181,7 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
             head->sequence = 0;
             head->file = (char*)pool; //is this this correct?
             head->size = block_size;
+            head->mode = 0;
 
             heap = head;
 
@@ -202,6 +203,7 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
         newNode->p_prev = cur;
         newNode->p_next = NULL;
         newNode->sequence = cur->sequence++;
+        newNode->mode = 0;
         //try to ge the start of the next node
         newNode->file = ((char*)pool + cur->size);
         newNode->size = block_size;
