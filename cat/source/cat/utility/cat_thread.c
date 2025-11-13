@@ -95,6 +95,8 @@ cat_impl bool cat_thread_rename(cstr_t const name)
 #include "cat/utility/cat_time.h"
 #include "cat/utility/cat_console.h"
 
+
+//Tristan made
 typedef struct thread_data
 {
     int executing;
@@ -135,6 +137,7 @@ static int cat_thread_test_func(size_t const argc, void* const argv[])
     return result;
 }
 
+//Tristan made
 static int new_thread_test_func(size_t const argc, void* const argv[])
 {
     thrd_t const* p_thrd = NULL;
@@ -159,6 +162,7 @@ static int thrd_test_func(void* const arg)
     return 0;
 }
 
+//Tristan made
 cat_noinl void create_new_thread(thread_manager* const thrd_manager)
 {
     thread_data_node* currNode = thrd_manager->deactive_thread_list;
@@ -182,6 +186,7 @@ cat_noinl void create_new_thread(thread_manager* const thrd_manager)
     currNode->nextNode->nextNode = NULL;
 }
 
+//Tristan made
 cat_noinl int run_new_thread(thread_manager* const thrd_manager, cat_thread_func_t func, thrd_t thrd, cat_thread_params_t params)
 {
     unused(func);
@@ -216,6 +221,7 @@ cat_noinl int run_new_thread(thread_manager* const thrd_manager, cat_thread_func
     return 0;
 }
 
+//Tristan made
 cat_noinl void handle_thread_finished(thread_manager* const thrd_manager, thread_data_node* nodeDoneExecuting)
 {
     thread_data_node* currNode = thrd_manager->active_thread_list;
@@ -244,6 +250,7 @@ cat_noinl void handle_thread_finished(thread_manager* const thrd_manager, thread
     thrd_manager->deactive_thread_list = currNode;
 }
 
+//Tristan made
 cat_noinl void free_thread_manager(thread_manager* thrd_manager)
 {
     thread_data_node* currNode = thrd_manager->active_thread_list;
@@ -271,27 +278,14 @@ cat_noinl void free_thread_manager(thread_manager* thrd_manager)
 
 cat_noinl void cat_thread_test(void)
 {
-    //thrd_t thrd = { 0 };
-    //int thrd_res = 0;
-    //int print_count = 10000;
-    //void* const args[] = {
-    //    &thrd,       // thread object
-    //    __FUNCTION__,// thread name
-    //    &print_count,// print count
-    //};
-    //cat_thread_params_t const params = {
-    //    &cat_thread_test_func, array_count(args), args
-    //};
-
-    //NEW VALUES
     thread_manager* const thrd_manager = (thread_manager*)malloc(sizeof(thread_manager));
     thrd_manager->active_thread_list = NULL;
     thrd_manager->deactive_thread_list = NULL;
 
+    //Creates 2 threads
     create_new_thread(thrd_manager);
     create_new_thread(thrd_manager);
 
-    //run_new_thread();
 
     thrd_t thrd = { 0 };
     void* const args[] = {
@@ -303,6 +297,7 @@ cat_noinl void cat_thread_test(void)
         &new_thread_test_func, array_count(args), args
     };
 
+    //Runs thread 1
     run_new_thread(thrd_manager, new_thread_test_func, thrd, params);
 
     thrd_t thrd2 = { 0 };
@@ -314,25 +309,13 @@ cat_noinl void cat_thread_test(void)
     cat_thread_params_t const params2 = {
         &new_thread_test_func, array_count(args2), args2
     };
+
+    //Runs thread 2
     run_new_thread(thrd_manager, new_thread_test_func, thrd2, params2);
 
     cat_console_clear();
-    /*{
-        thrd_res = thrd_create(&thrd, &thrd_test_func, NULL);
-        assert_or_bail(thrd_res == thrd_success);
-        thrd_join(thrd, &thrd_res);
-    }
-    {
-        thrd_res = cat_thrd_create(&thrd, &params);
-        assert_or_bail(thrd_res == thrd_success);
-        thrd_join(thrd, &thrd_res);
-    }*/
-    {
-        /*thrd_res_new = cat_thrd_create(&thrd_new, &params_new);
-        assert_or_bail(thrd_res_new == thrd_success);
-        thrd_detach(thrd_new);*/
-    }
 
+    //Runs until threads are done executing (no active threads)
     while (thrd_manager->active_thread_list != NULL)
     {
         thread_data_node* currNode = thrd_manager->active_thread_list;
