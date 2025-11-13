@@ -173,10 +173,11 @@ cat_impl cat_malloc_metadata_t* CreateCatNode(cat_malloc_metadata_t* pPrev, cat_
         head->p_prev = NULL;
         head->p_next = NULL;
         head->sequence = 0;
-        head->file = (char*)pool + sizeof(cat_malloc_metadata_t); //is this this correct?
+        head->file = (char*)pool + sizeof(cat_malloc_metadata_t);//get the pointer location
         head->size = block_size + 1;//add the pad
         head->mode = 0;
 
+        //change pool size
         poolSize -= head->size;
         poolSize -= sizeof(cat_malloc_metadata_t);
 
@@ -194,6 +195,7 @@ cat_impl cat_malloc_metadata_t* CreateCatNode(cat_malloc_metadata_t* pPrev, cat_
     newNode->file = ((char*)pPrev->file + pPrev->size + sizeof(cat_malloc_metadata_t));
     newNode->size = block_size + 1;
 
+    //change pool size
     poolSize -= newNode->size;
     poolSize -= sizeof(cat_malloc_metadata_t);
 
@@ -253,6 +255,7 @@ cat_impl void* cat_memory_alloc(size_t const block_size)
     return NULL;
 }
 
+//WILL MADE
 cat_impl bool cat_memory_dealloc(void* const p_block)
 {
     assert_or_bail(p_block) false;
@@ -264,6 +267,7 @@ cat_impl bool cat_memory_dealloc(void* const p_block)
     
     cat_malloc_metadata_t* cur = heap;
 
+    // remove list node
     while (cur->p_next != NULL)
     {
         if (cur->file == (char*)p_block)
@@ -284,6 +288,7 @@ cat_impl bool cat_memory_dealloc(void* const p_block)
             //add cat size 
             poolSize += cur->size + sizeof(cat_malloc_metadata_t);
 
+            //clear memory
             cat_memset(cur->file, 0, cur->size);
             cat_memset(cur, 0, sizeof(cat_malloc_metadata_t));
 
@@ -324,6 +329,8 @@ cat_noinl void cat_memory_test(void)
     cat_memory_dealloc(aloc);
 
     cat_memory_alloc(100);
+
+    cat_memory_pool_destroy();
 
 
     if (block_lh && block_rh)
