@@ -48,6 +48,7 @@ typedef struct cat_malloc_metadata_s
 } cat_malloc_metadata_t;
 #endif // #ifdef CAT_DEBUG
 
+//will made
 static void* pool;
 static size_t poolSize;
 static cat_malloc_metadata_t* heap;
@@ -136,6 +137,7 @@ cat_impl void cat_free(void* const p_block)
     free(p_block);
 }
 
+//will did
 cat_impl bool cat_memory_pool_create(size_t const pool_size)
 {
     assert_or_bail(pool_size) false;
@@ -151,6 +153,7 @@ cat_impl bool cat_memory_pool_create(size_t const pool_size)
     return false;
 }
 
+//will did 
 cat_impl bool cat_memory_pool_destroy(void)
 {
     //****TO-DO-MEMORY: safely deallocate pool allocated above.
@@ -163,6 +166,7 @@ cat_impl bool cat_memory_pool_destroy(void)
     return false;
 }
 
+//WILL did
 cat_impl cat_malloc_metadata_t* CreateCatNode(cat_malloc_metadata_t* pPrev, cat_malloc_metadata_t* pNext, size_t const block_size)
 {
     unused(pNext);
@@ -203,6 +207,7 @@ cat_impl cat_malloc_metadata_t* CreateCatNode(cat_malloc_metadata_t* pPrev, cat_
    
 }
 
+//WILL DID
 cat_impl void* cat_memory_alloc(size_t const block_size)
 {
     assert_or_bail(block_size) NULL;
